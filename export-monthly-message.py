@@ -1,9 +1,9 @@
 import requests
-import json
 import csv
 import os
 import time
-from datetime import datetime, timedelta
+import argparse
+from datetime import datetime
 from dotenv import load_dotenv
 from urllib.parse import urlparse, parse_qs
 
@@ -23,11 +23,46 @@ if not USER_ID:
 
 headers = {"Authorization": f"Bearer {SLACK_TOKEN}"}
 
-# ---- 2. 検索クエリの作成 (過去30日分) ----
-date_30_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-search_query = f"from:@{USER_ID} after:{date_30_days_ago}"
+# ---- 2. 引数を解析して検索クエリを作成 ----
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="指定した年月のSlackメッセージをエクスポートします"
+    )
+    parser.add_argument(
+        "--month",
+        help="取得対象の年月。YYYY-MM 形式で指定します（例: 2026-03）",
+    )
+    return parser.parse_args()
+
+
+def get_target_month(month_arg):
+    if not month_arg:
+        now = datetime.now()
+        return now.year, now.month
+
+    try:
+        target_date = datetime.strptime(month_arg, "%Y-%m")
+        return target_date.year, target_date.month
+    except ValueError as e:
+        raise ValueError("--month は YYYY-MM 形式で指定してください（例: 2026-03）") from e
+
+
+args = parse_args()
+target_year, target_month = get_target_month(args.month)
+
+month_start = datetime(target_year, target_month, 1)
+if target_month == 12:
+    next_month_start = datetime(target_year + 1, 1, 1)
+else:
+    next_month_start = datetime(target_year, target_month + 1, 1)
+
+search_query = (
+    f"from:@{USER_ID} after:{month_start.strftime('%Y-%m-%d')} "
+    f"before:{next_month_start.strftime('%Y-%m-%d')}"
+)
 
 print(f"実行クエリ: {search_query}")
+print(f"取得対象月: {target_year}-{target_month:02d}")
 
 # ---- 3. 親メッセージを取得する関数を定義 ----
 def get_parent_message(channel_id, thread_ts):
